@@ -4,8 +4,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Rect
 import com.myouo.lexiflow.analytics.HeatmapMetric
 import com.myouo.lexiflow.android.ui.components.HeatmapGrid
 import com.myouo.lexiflow.android.viewmodel.AnalyticsViewModel
@@ -14,7 +23,21 @@ import com.myouo.lexiflow.android.viewmodel.AnalyticsViewModel
 fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
     val state = viewModel.state.collectAsState().value
     
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    var clearTooltipTrigger by remember { mutableStateOf(0) }
+    var heatmapBounds by remember { mutableStateOf<Rect?>(null) }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    if (heatmapBounds != null && !heatmapBounds!!.contains(offset)) {
+                        clearTooltipTrigger++
+                    }
+                }
+            }
+            .padding(16.dp)
+    ) {
         Text("学习统计", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(24.dp))
         
@@ -38,7 +61,10 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp),
+                .height(200.dp)
+                .onGloballyPositioned { coords ->
+                    heatmapBounds = coords.boundsInParent()
+                },
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Box(
@@ -50,7 +76,8 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
                 HeatmapGrid(
                     days = state.heatmapDays,
                     currentMetric = state.currentMetric,
-                    modifier = Modifier.fillMaxWidth().wrapContentHeight()
+                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                    clearTooltipTrigger = clearTooltipTrigger
                 )
             }
         }

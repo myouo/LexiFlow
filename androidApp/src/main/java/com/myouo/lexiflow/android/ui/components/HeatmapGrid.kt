@@ -2,6 +2,7 @@ package com.myouo.lexiflow.android.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,27 +15,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
 import com.myouo.lexiflow.analytics.HeatmapDay
 import com.myouo.lexiflow.analytics.HeatmapMetric
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.window.PopupPositionProvider
 
 @Composable
 fun HeatmapGrid(
     days: List<HeatmapDay>,
     currentMetric: HeatmapMetric,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    clearTooltipTrigger: Int = 0
 ) {
     val cellSize = 14.dp
     val cellSpacingDp = 4.dp
@@ -44,6 +47,13 @@ fun HeatmapGrid(
     var clickedDayLabel by remember { mutableStateOf<String?>(null) }
     var clickedValueStr by remember { mutableStateOf<String?>(null) }
     var clickedCellBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var gridBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    
+    val textMeasurer = rememberTextMeasurer()
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val titleStyle = MaterialTheme.typography.titleMedium
+    val bodyStyle = MaterialTheme.typography.bodyMedium
     
     val dateMap = remember(days) { days.associateBy { it.date } }
     
@@ -58,7 +68,87 @@ fun HeatmapGrid(
         }
     }
     
-    Box(modifier = modifier) {
+    LaunchedEffect(currentMetric) {
+        if (clickedDayLabel != null) {
+            val stat = dateMap[clickedDayLabel]
+            val value = stat?.tooltipValue ?: 0
+            val prefix = if (currentMetric == HeatmapMetric.WORDS) "本日词数：" else "本日学习时长："
+            val correctSuffix = if (currentMetric == HeatmapMetric.WORDS) " 个" else " 分钟"
+            val valStr = if (value > 1000) "${value / 1000}k" else value.toString()
+            clickedValueStr = "$prefix$valStr$correctSuffix"
+        }
+    }
+    
+    LaunchedEffect(clearTooltipTrigger) {
+        if (clearTooltipTrigger > 0) {
+            clickedDayLabel = null
+        }
+    }
+    
+    Box(
+        modifier = modifier
+            .onGloballyPositioned { gridBounds = it.boundsInWindow() }
+            .pointerInput(Unit) {
+                detectTapGestures { clickedDayLabel = null }
+            }
+            .drawWithContent {
+                drawContent()
+                if (clickedDayLabel != null && clickedValueStr != null && clickedCellBounds != null && gridBounds != null) {
+                    val padding = 16.dp.toPx()
+                    val spacing = 4.dp.toPx()
+                    val cornerRadius = 8.dp.toPx()
+                    
+                    val titleResult = textMeasurer.measure(
+                        text = clickedDayLabel!!,
+                        style = titleStyle
+                    )
+                    val bodyResult = textMeasurer.measure(
+                        text = clickedValueStr!!,
+                        style = bodyStyle
+                    )
+                    
+                    val tooltipWidth = maxOf(titleResult.size.width, bodyResult.size.width) + padding * 2
+                    val tooltipHeight = titleResult.size.height + bodyResult.size.height + spacing + padding * 2
+                    
+                    val bounds = clickedCellBounds!!
+                    val localLeft = bounds.left - gridBounds!!.left
+                    val localRight = bounds.right - gridBounds!!.left
+                    val localTop = bounds.top - gridBounds!!.top
+                    val localBottom = bounds.bottom - gridBounds!!.top
+                    
+                    var x = localRight
+                    var y = localBottom
+                    
+                    if (x + tooltipWidth > size.width) {
+                        x = localLeft - tooltipWidth
+                    }
+                    if (y + tooltipHeight > size.height) {
+                        y = localTop - tooltipHeight
+                    }
+                    
+                    x = x.coerceIn(0f, maxOf(0f, size.width - tooltipWidth))
+                    y = y.coerceIn(0f, maxOf(0f, size.height - tooltipHeight))
+                    
+                    drawRoundRect(
+                        color = surfaceVariantColor.copy(alpha = 0.85f),
+                        topLeft = Offset(x, y),
+                        size = Size(tooltipWidth, tooltipHeight),
+                        cornerRadius = CornerRadius(cornerRadius)
+                    )
+                    
+                    drawText(
+                        textLayoutResult = titleResult,
+                        color = onSurfaceVariantColor,
+                        topLeft = Offset(x + padding, y + padding)
+                    )
+                    drawText(
+                        textLayoutResult = bodyResult,
+                        color = onSurfaceVariantColor,
+                        topLeft = Offset(x + padding, y + padding + titleResult.size.height + spacing)
+                    )
+                }
+            }
+    ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             // Left Y-axis Labels
             Column(
@@ -154,7 +244,6 @@ fun HeatmapGrid(
                                                 clickedDayLabel = dateStr
                                                 val value = stat?.tooltipValue ?: 0
                                                 val prefix = if (currentMetric == HeatmapMetric.WORDS) "本日词数：" else "本日学习时长："
-                                                val suffix = if (currentMetric == HeatmapMetric.WORDS) " 分钟" else " 个"
                                                 val correctSuffix = if (currentMetric == HeatmapMetric.WORDS) " 个" else " 分钟"
                                                 val valStr = if (value > 1000) "${value / 1000}k" else value.toString()
                                                 clickedValueStr = "$prefix$valStr$correctSuffix"
@@ -169,58 +258,5 @@ fun HeatmapGrid(
             }
         }
         
-        if (clickedDayLabel != null && clickedCellBounds != null) {
-            Popup(
-                popupPositionProvider = object : PopupPositionProvider {
-                    override fun calculatePosition(
-                        anchorBounds: IntRect,
-                        windowSize: IntSize,
-                        layoutDirection: LayoutDirection,
-                        popupContentSize: IntSize
-                    ): IntOffset {
-                        val bounds = clickedCellBounds!!
-                        var x = bounds.right.toInt()
-                        var y = bounds.bottom.toInt()
-                        
-                        // Flip left if offscreen right
-                        if (x + popupContentSize.width > windowSize.width) {
-                            x = bounds.left.toInt() - popupContentSize.width
-                        }
-                        // Flip up if offscreen bottom
-                        if (y + popupContentSize.height > windowSize.height) {
-                            y = bounds.top.toInt() - popupContentSize.height
-                        }
-                        
-                        // Coerce gracefully mapping window sizes
-                        x = x.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width))
-                        y = y.coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height))
-                        
-                        return IntOffset(x, y)
-                    }
-                },
-                onDismissRequest = { clickedDayLabel = null }
-            ) {
-                Card(
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = clickedDayLabel!!,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.inverseOnSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = clickedValueStr!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.inverseOnSurface
-                        )
-                    }
-                }
-            }
-        }
     }
 }

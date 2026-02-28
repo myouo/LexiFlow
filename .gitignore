@@ -3,3 +3,15 @@ androidApp/build
 error.log
 local.properties
 shared/build
+
+# IDE files
+.idea/
+*.iml
+
+# Kotlin/Gradle build outputs and caches
+build/
+.kotlin/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
