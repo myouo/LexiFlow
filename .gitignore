@@ -1,0 +1,5 @@
+.gradle/
+androidApp/build
+error.log
+local.properties
+shared/build

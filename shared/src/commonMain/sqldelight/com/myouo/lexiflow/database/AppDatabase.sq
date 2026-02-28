@@ -1,0 +1,111 @@
+CREATE TABLE words (
+    id TEXT NOT NULL PRIMARY KEY,
+    lemma TEXT NOT NULL,
+    lang TEXT NOT NULL
+);
+
+CREATE TABLE senses (
+    id TEXT NOT NULL PRIMARY KEY,
+    word_id TEXT NOT NULL,
+    pos TEXT NOT NULL,
+    gloss TEXT NOT NULL,
+    sense_order INTEGER AS kotlin.Int NOT NULL
+);
+
+CREATE TABLE srs_state (
+    sense_id TEXT NOT NULL PRIMARY KEY,
+    stability REAL AS kotlin.Double NOT NULL,
+    difficulty REAL AS kotlin.Double NOT NULL,
+    due INTEGER NOT NULL,
+    last_review_at INTEGER NOT NULL,
+    lapses INTEGER AS kotlin.Int NOT NULL
+);
+
+CREATE TABLE review_log (
+    sense_id TEXT NOT NULL,
+    rating INTEGER AS kotlin.Int NOT NULL,
+    timestamp INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL
+);
+
+CREATE TABLE daily_stats (
+    date TEXT NOT NULL PRIMARY KEY,
+    focus_seconds INTEGER AS kotlin.Int NOT NULL,
+    new_learned_words INTEGER AS kotlin.Int NOT NULL,
+    reviews INTEGER AS kotlin.Int NOT NULL,
+    updated_at INTEGER NOT NULL,
+    sig TEXT NOT NULL
+);
+
+CREATE TABLE settings (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Queries for words --
+insertWord:
+INSERT OR REPLACE INTO words(id, lemma, lang)
+VALUES (?, ?, ?);
+
+getWord:
+SELECT * FROM words WHERE id = ?;
+
+-- Queries for senses --
+insertSense:
+INSERT OR REPLACE INTO senses(id, word_id, pos, gloss, sense_order)
+VALUES (?, ?, ?, ?, ?);
+
+getSensesForWord:
+SELECT * FROM senses WHERE word_id = ? ORDER BY sense_order ASC;
+
+-- Queries for srs_state --
+insertSrsState:
+INSERT OR REPLACE INTO srs_state(sense_id, stability, difficulty, due, last_review_at, lapses)
+VALUES (?, ?, ?, ?, ?, ?);
+
+getSrsState:
+SELECT * FROM srs_state WHERE sense_id = ?;
+
+-- Scheduling: 1. due <= now, 2. lowest stability, 3. new words limit --
+getSensesDue:
+SELECT senses.* FROM senses
+INNER JOIN srs_state ON senses.id = srs_state.sense_id
+WHERE srs_state.due <= :currentTime
+ORDER BY srs_state.due ASC;
+
+getSensesByStability:
+SELECT senses.* FROM senses
+INNER JOIN srs_state ON senses.id = srs_state.sense_id
+ORDER BY srs_state.stability ASC;
+
+-- Find senses that have no srs_state (New words)
+getNewSenses:
+SELECT senses.* FROM senses
+LEFT JOIN srs_state ON senses.id = srs_state.sense_id
+WHERE srs_state.sense_id IS NULL
+ORDER BY senses.sense_order ASC
+LIMIT :limit;
+
+-- Review Logs --
+insertReviewLog:
+INSERT INTO review_log(sense_id, rating, timestamp, duration_ms)
+VALUES (?, ?, ?, ?);
+
+-- Daily Stats --
+insertOrUpdateDailyStats:
+INSERT OR REPLACE INTO daily_stats(date, focus_seconds, new_learned_words, reviews, updated_at, sig)
+VALUES (?, ?, ?, ?, ?, ?);
+
+getDailyStats:
+SELECT * FROM daily_stats WHERE date = ?;
+
+getAllDailyStats:
+SELECT * FROM daily_stats ORDER BY date ASC;
+
+-- Settings --
+insertSetting:
+INSERT OR REPLACE INTO settings(key, value)
+VALUES (?, ?);
+
+getSetting:
+SELECT value FROM settings WHERE key = ?;
