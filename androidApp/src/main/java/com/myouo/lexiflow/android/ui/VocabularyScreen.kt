@@ -11,6 +11,11 @@ import com.myouo.lexiflow.android.viewmodel.VocabularyViewModel
 
 @Composable
 fun VocabularyScreen(viewModel: VocabularyViewModel) {
+    val recomposeCount = remember { arrayOf(0) }
+    androidx.compose.runtime.SideEffect {
+        recomposeCount[0]++
+        android.util.Log.d("PerfLog", "VocabularyScreen recomposed: ${recomposeCount[0]}")
+    }
     val state = viewModel.state.collectAsState().value
     
     var customUrl by remember { mutableStateOf("") }

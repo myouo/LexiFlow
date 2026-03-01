@@ -1,5 +1,10 @@
 package com.myouo.lexiflow.android.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +23,11 @@ import com.myouo.lexiflow.fsrs.Rating
 
 @Composable
 fun ReviewScreen(navController: NavController, viewModel: ReviewViewModel) {
+    val recomposeCount = remember { arrayOf(0) }
+    androidx.compose.runtime.SideEffect {
+        recomposeCount[0]++
+        android.util.Log.d("PerfLog", "ReviewScreen recomposed: ${recomposeCount[0]}")
+    }
     val reviewState = viewModel.state.collectAsState().value
     
     // Empty state logic
@@ -81,10 +91,17 @@ fun ReviewScreen(navController: NavController, viewModel: ReviewViewModel) {
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = currentSense?.gloss ?: "暂无释义。",
-                style = MaterialTheme.typography.bodyLarge
-            )
+            AnimatedContent(
+                targetState = currentSense?.gloss ?: "暂无释义。",
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(150))
+                }
+            ) { gloss ->
+                Text(
+                    text = gloss,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
         }
         
         // Sense Chip Nav

@@ -10,6 +10,8 @@ import com.myouo.lexiflow.review.ReviewScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class ReviewState(
     val word: Words? = null,
@@ -36,11 +38,15 @@ class ReviewViewModel(
 
     private fun loadNextWord() {
         viewModelScope.launch {
+            android.util.Log.d("PerfLog", "ReviewViewModel state emitting (loadNextWord loading)")
             _state.value = _state.value.copy(loading = true)
             // Fetch next senses based on FSRS priority
-            val nextSenses = reviewScheduler.getNextSensesToReview(topK)
+            android.util.Log.d("PerfLog", "ReviewViewModel: DB getNextSensesToReview start")
+            val nextSenses = withContext(Dispatchers.IO) { reviewScheduler.getNextSensesToReview(topK) }
+            android.util.Log.d("PerfLog", "ReviewViewModel: DB getNextSensesToReview end")
             
             if (nextSenses.isEmpty()) {
+                android.util.Log.d("PerfLog", "ReviewViewModel state emitting (loadNextWord empty)")
                 _state.value = ReviewState(empty = true, isFinished = true, loading = false)
                 return@launch
             }
@@ -48,10 +54,13 @@ class ReviewViewModel(
             // For simplicity, we assume the scheduler returns `Limit` senses matching ONE word. 
             // Realistically, the scheduler would group senses by word. We just take the first word's senses for the UI mapping.
             val targetWordId = nextSenses.first().word_id
-            val word = db.getWord(targetWordId)
+            android.util.Log.d("PerfLog", "ReviewViewModel: DB getWord start")
+            val word = withContext(Dispatchers.IO) { db.getWord(targetWordId) }
+            android.util.Log.d("PerfLog", "ReviewViewModel: DB getWord end")
             
             val sensesForWord = nextSenses.filter { it.word_id == targetWordId }.take(topK)
             
+            android.util.Log.d("PerfLog", "ReviewViewModel state emitting (loadNextWord success)")
             _state.value = ReviewState(
                 word = word,
                 senses = sensesForWord,
@@ -67,10 +76,15 @@ class ReviewViewModel(
         
         viewModelScope.launch {
              val currentSense = currentState.senses[currentState.currentSenseIndex]
-             reviewScheduler.submitReview(currentSense.id, rating, durationMs)
+             android.util.Log.d("PerfLog", "ReviewViewModel: DB submitReview start")
+             withContext(Dispatchers.IO) { 
+                 reviewScheduler.submitReview(currentSense.id, rating, durationMs) 
+             }
+             android.util.Log.d("PerfLog", "ReviewViewModel: DB submitReview end")
              
              // Move to next sense
              if (currentState.currentSenseIndex < currentState.senses.size - 1) {
+                 android.util.Log.d("PerfLog", "ReviewViewModel state emitting (submitRating next sense)")
                  _state.value = currentState.copy(
                      currentSenseIndex = currentState.currentSenseIndex + 1
                  )

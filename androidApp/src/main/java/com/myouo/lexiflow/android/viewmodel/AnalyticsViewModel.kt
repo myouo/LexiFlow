@@ -28,10 +28,12 @@ class AnalyticsViewModel(
     val state: StateFlow<AnalyticsState> = _state
 
     init {
+        android.util.Log.d("PerfLog", "AnalyticsViewModel initialized (Single Init)")
         loadData()
     }
 
     fun toggleMetric() {
+        android.util.Log.d("PerfLog", "AnalyticsViewModel state emitting (toggleMetric)")
         val newMetric = if (_state.value.currentMetric == HeatmapMetric.WORDS) HeatmapMetric.TIME else HeatmapMetric.WORDS
         _state.value = _state.value.copy(currentMetric = newMetric)
         loadData()
@@ -39,7 +41,9 @@ class AnalyticsViewModel(
 
     private fun loadData() {
         viewModelScope.launch {
-            val days = heatmapCalculator.getHeatmapData(_state.value.currentMetric)
+            android.util.Log.d("PerfLog", "AnalyticsViewModel: HeatmapCalc start")
+            val days = withContext(Dispatchers.IO) { heatmapCalculator.getHeatmapData(_state.value.currentMetric) }
+            android.util.Log.d("PerfLog", "AnalyticsViewModel: HeatmapCalc end")
             
             // Pad empty year if no stats
             val displayDays = if (days.isEmpty()) {
@@ -52,6 +56,7 @@ class AnalyticsViewModel(
             val allStats = withContext(Dispatchers.IO) { db.queries().getAllDailyStats().executeAsList() }
             val totalSeconds = allStats.sumOf { it.focus_seconds.toLong() }
 
+            android.util.Log.d("PerfLog", "AnalyticsViewModel state emitting (loadData)")
             _state.value = _state.value.copy(
                 heatmapDays = displayDays,
                 totalStudyDays = displayDays.count { it.level > 0 },

@@ -3,6 +3,7 @@ package com.myouo.lexiflow.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -15,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -33,11 +35,15 @@ import com.myouo.lexiflow.i18n.LocalizationManager
 import com.myouo.lexiflow.i18n.LanguageMode
 
 class AppViewModelFactory(private val context: android.content.Context) : ViewModelProvider.Factory {
+    private val dbDriverFactory by lazy { com.myouo.lexiflow.database.DatabaseDriverFactory(context.applicationContext) }
+    private val dbHelper by lazy { 
+        android.util.Log.d("PerfLog", "DB initialized")
+        com.myouo.lexiflow.database.DatabaseHelper(dbDriverFactory) 
+    }
+
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         // Wrap logic in exceptions if standard SQLite factory isn't mocked during preview runs
         return try {
-            val dbDriverFactory = com.myouo.lexiflow.database.DatabaseDriverFactory(context)
-            val dbHelper = com.myouo.lexiflow.database.DatabaseHelper(dbDriverFactory)
             
             when {
                 modelClass.isAssignableFrom(com.myouo.lexiflow.android.viewmodel.ReviewViewModel::class.java) -> {
@@ -64,7 +70,7 @@ class AppViewModelFactory(private val context: android.content.Context) : ViewMo
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+ 
         setContent {
             LexiFlowTheme { // Settings theme observation would usually wrap around here
                 LexiFlowApp()
@@ -75,6 +81,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun LexiFlowApp() {
+    val recomposeCount = remember { arrayOf(0) }
+    androidx.compose.runtime.SideEffect {
+        recomposeCount[0]++
+        android.util.Log.d("PerfLog", "LexiFlowApp recomposed: ${recomposeCount[0]}")
+    }
     val navController = rememberNavController()
     val context = LocalContext.current
     val factory = remember { AppViewModelFactory(context) }
@@ -91,39 +102,70 @@ fun LexiFlowApp() {
         NavHost(
             navController = navController,
             startDestination = "review",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = { androidx.compose.animation.EnterTransition.None },
+            exitTransition = { androidx.compose.animation.ExitTransition.None },
+            popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+            popExitTransition = { androidx.compose.animation.ExitTransition.None }
         ) {
-            composable("review") { ReviewScreen(navController, viewModel = viewModel(factory = factory)) }
-            composable("vocabulary") { VocabularyScreen(viewModel = viewModel(factory = factory)) }
-            composable("analytics") { AnalyticsScreen(viewModel = viewModel(factory = factory)) }
-            composable("settings") { SettingsScreen(viewModel = viewModel(factory = factory)) }
+            composable("review") { 
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    ReviewScreen(navController, viewModel = viewModel(factory = factory)) 
+                }
+            }
+            composable("vocabulary") { 
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    VocabularyScreen(viewModel = viewModel(factory = factory)) 
+                }
+            }
+            composable("analytics") { 
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    AnalyticsScreen(viewModel = viewModel(factory = factory)) 
+                }
+            }
+            composable("settings") { 
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    SettingsScreen(viewModel = viewModel(factory = factory)) 
+                }
+            }
         }
     }
 }
 
 @Composable
 fun LexiFlowBottomNavigation(navController: NavHostController, locManager: LocalizationManager) {
+    val recomposeCount = remember { arrayOf(0) }
+    androidx.compose.runtime.SideEffect {
+        recomposeCount[0]++
+        android.util.Log.d("PerfLog", "LexiFlowBottomNavigation recomposed: ${recomposeCount[0]}")
+    }
     val language by locManager.currentLanguage.collectAsState()
-    val isZh = language == LanguageMode.ZH_HANS
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
-    val items = listOf(
-        Triple("review", if (isZh) "复习" else "Review", Icons.Filled.List),
-        Triple("vocabulary", if (isZh) "词库" else "Vocabulary", Icons.Filled.Build),
-        Triple("analytics", if (isZh) "统计" else "Analytics", Icons.Filled.DateRange),
-        Triple("settings", if (isZh) "设置" else "Settings", Icons.Filled.Settings)
-    )
+    val items = when (language) {
+        LanguageMode.EN -> listOf(
+            BottomNavItem("review", "Review", Icons.Filled.List),
+            BottomNavItem("vocabulary", "Words", Icons.Filled.Build),
+            BottomNavItem("analytics", "Stats", Icons.Filled.DateRange),
+            BottomNavItem("settings", "Settings", Icons.Filled.Settings)
+        )
+        else -> listOf(
+            BottomNavItem("review", "复习", Icons.Filled.List),
+            BottomNavItem("vocabulary", "词汇", Icons.Filled.Build),
+            BottomNavItem("analytics", "统计", Icons.Filled.DateRange),
+            BottomNavItem("settings", "设置", Icons.Filled.Settings)
+        )
+    }
 
     NavigationBar {
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = navBackStackEntry?.destination?.route
-
-        items.forEach { (route, label, icon) ->
+        items.forEach { item ->
             NavigationBarItem(
-                icon = { Icon(icon, contentDescription = label) },
-                label = { Text(label) },
-                selected = currentRoute == route,
+                icon = { Icon(item.icon, contentDescription = item.label) },
+                label = { Text(item.label) },
+                selected = currentRoute == item.route,
                 onClick = {
-                    navController.navigate(route) {
+                    navController.navigate(item.route) {
                         popUpTo(navController.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
@@ -133,3 +175,9 @@ fun LexiFlowBottomNavigation(navController: NavHostController, locManager: Local
         }
     }
 }
+
+data class BottomNavItem(
+    val route: String,
+    val label: String,
+    val icon: ImageVector
+)

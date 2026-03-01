@@ -3,6 +3,7 @@ androidApp/build
 error.log
 local.properties
 shared/build
+*.log
 
 # IDE files
 .idea/
